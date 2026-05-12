@@ -5,8 +5,8 @@ on:
       - .github/workflows/scheduled.yml
       - taps
   schedule:
-    # Every 15 minutes
-    - cron: "0 8 * * *"
+    # At 06:00 every day
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 env:
@@ -69,5 +69,5 @@ jobs:
         uses: EndBug/add-and-commit@v9
         with:
           add: 'cask.json'
-          message: 'chore: Update api output'
+          message: 'chore: update casks'
           default_author: github_actions
