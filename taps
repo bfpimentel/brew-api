@@ -2,7 +2,6 @@
 
 TAPS=(
     homebrew/cask
-    felixkratz/formulae
     mikker/tap
     nikitabobko/tap
 )
