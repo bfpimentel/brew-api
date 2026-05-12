@@ -1,7 +1,8 @@
 #!/bin/sh
 
 TAPS=(
-	homebrew/cask
-	nikitabobko/homebrew-tap
-	Sikarugir-App/sikarugir
+    homebrew/cask
+    felixkratz/formulae
+    mikker/tap
+    nikitabobko/tap
 )
