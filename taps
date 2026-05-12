@@ -1,0 +1,7 @@
+#!/bin/sh
+
+TAPS=(
+	homebrew/cask
+	nikitabobko/homebrew-tap
+	Sikarugir-App/sikarugir
+)
