@@ -2,5 +2,6 @@
 
 TAPS=(
     homebrew/cask
+    mikker/tap
     nikitabobko/tap
 )
