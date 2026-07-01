@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Homebrew Cask Browser</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --line:#243047; --accent:#60a5fa; --chip:#1e293b; }
+    @media (prefers-color-scheme: light) { :root { --bg:#f8fafc; --panel:#fff; --muted:#64748b; --text:#0f172a; --line:#e2e8f0; --accent:#2563eb; --chip:#f1f5f9; } }
+    * { box-sizing: border-box; } body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+    header { position:sticky; top:0; z-index:2; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(12px); border-bottom:1px solid var(--line); }
+    .wrap { max-width:1200px; margin:auto; padding:20px; } h1 { margin:0 0 12px; font-size:28px; }
+    .controls { display:grid; grid-template-columns: 1fr repeat(3, max-content); gap:10px; align-items:center; }
+    input, select, button { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--panel); color:var(--text); font:inherit; }
+    button { cursor:pointer; } button:hover, a { color:var(--accent); } .status { color:var(--muted); margin-top:10px; }
+    main.wrap { padding-top:18px; } .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:14px; }
+    article { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 8px 24px rgba(0,0,0,.08); overflow:hidden; cursor:pointer; }
+    article:hover { border-color:var(--accent); }
+    h2 { font-size:18px; margin:0 0 6px; overflow-wrap:anywhere; } p { margin:8px 0; } .muted { color:var(--muted); }
+    .meta { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; } .chip { background:var(--chip); border:1px solid var(--line); border-radius:999px; padding:3px 8px; font-size:12px; color:var(--muted); }
+    .bad { color:#f87171; } .ok { color:#34d399; } code { overflow-wrap:anywhere; }
+    .pager { display:flex; gap:10px; justify-content:center; align-items:center; margin:24px 0; }
+    .empty, .loading { text-align:center; color:var(--muted); padding:40px; }
+    .file { display:none; margin-top:10px; }
+    .spinner { width:42px; height:42px; margin:0 auto 14px; border:4px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+    dialog { width:min(920px, calc(100vw - 32px)); max-height:85vh; border:1px solid var(--line); border-radius:18px; padding:0; background:var(--panel); color:var(--text); }
+    dialog::backdrop { background:rgba(2,6,23,.7); backdrop-filter:blur(4px); }
+    .modal-head { position:sticky; top:0; background:var(--panel); border-bottom:1px solid var(--line); padding:18px 20px; display:flex; justify-content:space-between; gap:16px; }
+    .modal-body { padding:18px 20px; } .versions { display:grid; gap:12px; }
+    .version { border:1px solid var(--line); border-radius:14px; padding:14px; background:color-mix(in srgb, var(--chip) 60%, transparent); }
+    .close { height:max-content; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @media (max-width:760px) { .controls { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <header><div class="wrap">
+    <h1>Homebrew Cask Browser</h1>
+    <div class="controls">
+      <input id="q" type="search" placeholder="Search token, name, description, homepage…" autocomplete="off">
+      <select id="filter"><option value="all">All casks</option><option value="outdated">Outdated</option><option value="deprecated">Deprecated</option><option value="disabled">Disabled</option><option value="auto_updates">Auto-updates</option></select>
+      <select id="sort"><option value="token">Sort: token</option><option value="name">Sort: name</option><option value="version">Sort: version</option></select>
+      <button id="reload">Reload</button>
+    </div>
+    <div id="status" class="status">Loading cask.json…</div>
+    <input id="file" class="file" type="file" accept="application/json,.json">
+  </div></header>
+  <main class="wrap">
+    <div id="loading" class="loading"><div class="spinner"></div><strong>Loading cask.json…</strong><br><span>This may take a moment; the file is large.</span></div>
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty" hidden>No casks match your search.</div>
+    <div class="pager"><button id="prev">Previous</button><span id="page"></span><button id="next">Next</button></div>
+  </main>
+  <dialog id="details"><div id="modal"></div></dialog>
+  <script>
+    const pageSize = 60;
+    let all = [], groups = [], view = [], page = 1;
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+    const title = c => (Array.isArray(c.name) && c.name[0]) || c.token;
+    const baseToken = c => String(c.token || '').split('@')[0];
+    const latest = g => g.items[0];
+
+    function setLoading(loading) {
+      $('loading').hidden = !loading;
+      $('grid').hidden = loading;
+      $('prev').disabled = loading;
+      $('next').disabled = loading;
+      $('reload').disabled = loading;
+    }
+
+    async function load() {
+      setLoading(true);
+      $('file').style.display = 'none';
+      $('status').textContent = 'Loading cask.json…';
+      try {
+        const res = await fetch('cask.json', {cache:'no-store'});
+        if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+        all = await res.json();
+        groups = groupCasks(all);
+        apply();
+      } catch (e) {
+        $('status').innerHTML = 'Could not fetch <code>cask.json</code> (' + esc(e.message) + '). Serve this directory with a local web server, deploy it alongside <code>cask.json</code>, or choose the file below.';
+        $('file').style.display = 'block';
+        setLoading(false);
+      }
+    }
+
+    function groupCasks(casks) {
+      const map = new Map();
+      for (const c of casks) {
+        const key = baseToken(c);
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(c);
+      }
+      return [...map.entries()].map(([token, items]) => {
+        items.sort((a,b) => String(b.version || '').localeCompare(String(a.version || ''), undefined, {numeric:true, sensitivity:'base'}));
+        return {token, items};
+      });
+    }
+
+    function apply() {
+      const q = $('q').value.trim().toLowerCase(), f = $('filter').value, s = $('sort').value;
+      view = groups.filter(g => {
+        if (f !== 'all' && !g.items.some(c => c[f])) return false;
+        if (!q) return true;
+        return g.items.some(c => [c.token, c.full_token, title(c), c.desc, c.homepage, c.version].join(' ').toLowerCase().includes(q));
+      }).sort((a,b) => {
+        const ca = latest(a), cb = latest(b);
+        return String(s === 'name' ? title(ca) : s === 'token' ? a.token : ca[s] || '').localeCompare(String(s === 'name' ? title(cb) : s === 'token' ? b.token : cb[s] || ''), undefined, {numeric:true, sensitivity:'base'});
+      });
+      page = 1; render();
+    }
+
+    function render() {
+      const pages = Math.max(1, Math.ceil(view.length / pageSize)); page = Math.min(page, pages);
+      const slice = view.slice((page - 1) * pageSize, page * pageSize);
+      $('grid').innerHTML = slice.map((g, i) => {
+        const c = latest(g), count = g.items.length;
+        return `<article data-i="${(page - 1) * pageSize + i}" title="Click to view versions">
+          <h2>${esc(title(c))}</h2>
+          <div class="muted"><code>${esc(g.token)}</code></div>
+          <p>${esc(c.desc || 'No description')}</p>
+          <div class="meta">
+            <span class="chip">${count} ${count === 1 ? 'version' : 'versions'}</span>
+            <span class="chip">latest: ${esc(c.version || 'unknown')}</span>
+            ${c.auto_updates ? '<span class="chip ok">auto-updates</span>' : ''}
+            ${g.items.some(x => x.outdated) ? '<span class="chip bad">outdated</span>' : ''}
+            ${g.items.some(x => x.deprecated) ? '<span class="chip bad">deprecated</span>' : ''}
+            ${g.items.some(x => x.disabled) ? '<span class="chip bad">disabled</span>' : ''}
+          </div>
+          ${c.homepage ? `<p><a href="${esc(c.homepage)}" target="_blank" rel="noreferrer">Homepage</a></p>` : ''}
+          <p class="muted"><small>Click to view all versions and URLs.</small></p>
+        </article>`}).join('');
+      $('empty').hidden = view.length !== 0; $('page').textContent = `${view.length.toLocaleString()} casks · ${all.length.toLocaleString()} versions · page ${page} / ${pages}`;
+      $('prev').disabled = page <= 1; $('next').disabled = page >= pages;
+      setLoading(false);
+      $('status').textContent = `Loaded ${all.length.toLocaleString()} casks from cask.json.`;
+    }
+
+    function showDetails(g) {
+      const c = latest(g);
+      $('modal').innerHTML = `<div class="modal-head"><div><h2>${esc(title(c))}</h2><div class="muted"><code>${esc(g.token)}</code> · ${g.items.length} ${g.items.length === 1 ? 'version' : 'versions'}</div></div><button class="close" onclick="details.close()">Close</button></div>
+        <div class="modal-body"><p>${esc(c.desc || 'No description')}</p>${c.homepage ? `<p><a href="${esc(c.homepage)}" target="_blank" rel="noreferrer">Homepage</a></p>` : ''}<div class="versions">
+        ${g.items.map(v => `<div class="version"><h3>${esc(v.token)}</h3><div class="meta"><span class="chip">v ${esc(v.version || 'unknown')}</span>${v.auto_updates ? '<span class="chip ok">auto-updates</span>' : ''}${v.outdated ? '<span class="chip bad">outdated</span>' : ''}${v.deprecated ? '<span class="chip bad">deprecated</span>' : ''}${v.disabled ? '<span class="chip bad">disabled</span>' : ''}</div>${v.url ? `<p class="muted"><small>URL: <code>${esc(v.url)}</code></small></p>` : ''}${v.sha256 ? `<p class="muted"><small>SHA256: <code>${esc(v.sha256)}</code></small></p>` : ''}</div>`).join('')}</div></div>`;
+      $('details').showModal();
+    }
+
+    $('q').addEventListener('input', apply); $('filter').addEventListener('change', apply); $('sort').addEventListener('change', apply);
+    $('prev').onclick = () => { page--; render(); scrollTo({top:0, behavior:'smooth'}); };
+    $('next').onclick = () => { page++; render(); scrollTo({top:0, behavior:'smooth'}); };
+    $('reload').onclick = load;
+    $('file').addEventListener('change', async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      setLoading(true);
+      $('status').textContent = `Loading ${file.name}…`;
+      try {
+        all = JSON.parse(await file.text());
+        groups = groupCasks(all);
+        apply();
+      } catch (err) {
+        $('status').textContent = `Could not read ${file.name}: ${err.message}`;
+        setLoading(false);
+      }
+    });
+    $('grid').addEventListener('click', e => {
+      const card = e.target.closest('article');
+      if (!card || e.target.closest('a')) return;
+      showDetails(view[Number(card.dataset.i)]);
+    });
+    $('details').addEventListener('click', e => { if (e.target.id === 'details') $('details').close(); });
+    load();
+  </script>
+</body>
+</html>
