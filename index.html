@@ -58,7 +58,8 @@
     const $ = id => document.getElementById(id);
     const esc = s => String(s ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
     const title = c => (Array.isArray(c.name) && c.name[0]) || c.token;
-    const baseToken = c => String(c.token || '').split('@')[0];
+    const groupKey = c => String(c.full_token || c.token || '').split('@')[0];
+    const displayToken = c => c.full_token && c.full_token !== c.token ? c.full_token : c.token;
     const latest = g => g.items[0];
 
     function setLoading(loading) {
@@ -89,7 +90,7 @@
     function groupCasks(casks) {
       const map = new Map();
       for (const c of casks) {
-        const key = baseToken(c);
+        const key = groupKey(c);
         if (!map.has(key)) map.set(key, []);
         map.get(key).push(c);
       }
@@ -142,7 +143,7 @@
       const c = latest(g);
       $('modal').innerHTML = `<div class="modal-head"><div><h2>${esc(title(c))}</h2><div class="muted"><code>${esc(g.token)}</code> · ${g.items.length} ${g.items.length === 1 ? 'version' : 'versions'}</div></div><button class="close" onclick="details.close()">Close</button></div>
         <div class="modal-body"><p>${esc(c.desc || 'No description')}</p>${c.homepage ? `<p><a href="${esc(c.homepage)}" target="_blank" rel="noreferrer">Homepage</a></p>` : ''}<div class="versions">
-        ${g.items.map(v => `<div class="version"><h3>${esc(v.token)}</h3><div class="meta"><span class="chip">v ${esc(v.version || 'unknown')}</span>${v.auto_updates ? '<span class="chip ok">auto-updates</span>' : ''}${v.outdated ? '<span class="chip bad">outdated</span>' : ''}${v.deprecated ? '<span class="chip bad">deprecated</span>' : ''}${v.disabled ? '<span class="chip bad">disabled</span>' : ''}</div>${v.url ? `<p class="muted"><small>URL: <code>${esc(v.url)}</code></small></p>` : ''}${v.sha256 ? `<p class="muted"><small>SHA256: <code>${esc(v.sha256)}</code></small></p>` : ''}</div>`).join('')}</div></div>`;
+        ${g.items.map(v => `<div class="version"><h3>${esc(displayToken(v))}</h3><div class="meta"><span class="chip">v ${esc(v.version || 'unknown')}</span>${v.auto_updates ? '<span class="chip ok">auto-updates</span>' : ''}${v.outdated ? '<span class="chip bad">outdated</span>' : ''}${v.deprecated ? '<span class="chip bad">deprecated</span>' : ''}${v.disabled ? '<span class="chip bad">disabled</span>' : ''}</div>${v.url ? `<p class="muted"><small>URL: <code>${esc(v.url)}</code></small></p>` : ''}${v.sha256 ? `<p class="muted"><small>SHA256: <code>${esc(v.sha256)}</code></small></p>` : ''}</div>`).join('')}</div></div>`;
       $('details').showModal();
     }
 
