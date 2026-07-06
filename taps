@@ -3,4 +3,5 @@
 TAPS=(
     homebrew/cask
     nikitabobko/tap
+    Augani/dory
 )
