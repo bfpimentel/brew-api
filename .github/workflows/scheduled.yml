@@ -1,9 +1,7 @@
 name: Update cask.json
 on:
   push:
-    paths:
-      - .github/workflows/scheduled.yml
-      - taps
+    branches: [main]
   schedule:
     # At 06:00 every day
     - cron: "0 6 * * *"
