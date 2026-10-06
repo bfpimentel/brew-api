@@ -3,5 +3,5 @@
 TAPS=(
     homebrew/cask
     nikitabobko/tap
-    abue-ammar/tinycast
+    bfpimentel/tap
 )
