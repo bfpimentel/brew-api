@@ -6,6 +6,8 @@ on:
     # At 06:00 every day
     - cron: "0 6 * * *"
   workflow_dispatch:
+  repository_dispatch:
+    types: [homebrew-tap-updated]
 
 permissions:
   contents: write
