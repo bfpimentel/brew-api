@@ -4,4 +4,5 @@ TAPS=(
     homebrew/cask
     nikitabobko/tap
     bfpimentel/tap
+    notprotonnot/notproton
 )
